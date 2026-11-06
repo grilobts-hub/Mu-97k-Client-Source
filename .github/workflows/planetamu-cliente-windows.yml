@@ -1,0 +1,57 @@
+name: PlanetaMu Cliente Windows x86 0.97.30
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compilar-cliente:
+    runs-on: windows-2022
+    steps:
+      - name: Baixar codigo fixado na versao 0.97.30
+        uses: actions/checkout@v4
+        with:
+          repository: EmanuelCatania/Mu-97k-Client-Source
+          ref: 0.97.30
+          persist-credentials: false
+
+      - name: Configurar IP local sem alterar o codigo original
+        shell: pwsh
+        run: |
+          $arquivo = 'src/Config/ServerConfig.h'
+          $texto = Get-Content -Path $arquivo -Raw -Encoding utf8
+          $antigo = '"mu.server-pups.space"'
+          $novo = '"127.0.0.1"'
+          $quantidade = ([regex]::Matches($texto, [regex]::Escape($antigo))).Count
+          if ($quantidade -ne 2) {
+            throw "Esperados 2 enderecos padrao no ServerConfig.h; encontrados: $quantidade"
+          }
+          $texto = $texto.Replace($antigo, $novo)
+          Set-Content -Path $arquivo -Value $texto -Encoding utf8
+          Write-Host 'IP do ConnectServer e do GameServer ajustados para 127.0.0.1'
+
+      - name: Configurar compilacao Windows de 32 bits
+        run: cmake --preset windows-x86-release
+
+      - name: Compilar cliente
+        run: cmake --build --preset windows-x86-release --parallel 2
+
+      - name: Confirmar main.exe
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'bin/Client/main.exe')) {
+            throw 'main.exe nao foi gerado em bin/Client/'
+          }
+          Get-Item 'bin/Client/main.exe' | Format-List Name,Length,FullName
+
+      - name: Disponibilizar o executavel compilado
+        uses: actions/upload-artifact@v4
+        with:
+          name: PlanetaMu-Cliente-x86-09730
+          path: |
+            bin/Client/main.exe
+            bin/Client/main.map
+          if-no-files-found: error
+          retention-days: 7
